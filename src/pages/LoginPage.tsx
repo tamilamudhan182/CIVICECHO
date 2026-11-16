@@ -67,16 +67,50 @@ const LoginPage = () => {
   const [password, setPassword] = useState('admin123');
   const [loading, setLoading] = useState(false);
 
-  // Load registered citizen accounts from localStorage
+  // Load registered citizen accounts from H2 database & localStorage
   useEffect(() => {
-    const list = authService.getAccounts();
-    setAccounts(list);
-    if (list.length > 0) {
-      setAadhaar(list[0].aadhaar);
-    }
+    const loadAll = async () => {
+      try {
+        const dbUsers = await apiService.getAllUsers();
+        if (dbUsers && dbUsers.length > 0) {
+          const currentLocal = authService.getAccounts();
+          dbUsers.forEach(u => {
+            if (u.aadhaar) {
+              const cleanAadhaar = u.aadhaar.replace(/\D/g, '');
+              const existingIdx = currentLocal.findIndex(a => a.aadhaar.replace(/\D/g, '') === cleanAadhaar);
+              const mapped = {
+                id: String(u.id || `usr-${Date.now()}`),
+                name: u.name,
+                email: u.email,
+                aadhaar: cleanAadhaar,
+                otp: u.otp || '123456',
+                locality: u.locality || 'Koramangala',
+                district: u.district || 'Bengaluru Urban',
+                state: u.state || 'Karnataka',
+                points: u.points || 0,
+              };
+              if (existingIdx >= 0) {
+                currentLocal[existingIdx] = { ...currentLocal[existingIdx], ...mapped };
+              } else {
+                currentLocal.push(mapped);
+              }
+            }
+          });
+          authService.saveAccounts(currentLocal);
+        }
+      } catch (err) {
+        console.warn('Could not sync users from DB on mount:', err);
+      }
+      const list = authService.getAccounts();
+      setAccounts(list);
+      if (list.length > 0) {
+        setAadhaar(list[0].aadhaar);
+      }
+    };
+    loadAll();
   }, []);
 
-  const handleSendOtp = () => {
+  const handleSendOtp = async () => {
     setErrorMsg(null);
     const clean = aadhaar.replace(/\D/g, '');
     if (clean.length !== 12) {
@@ -84,9 +118,12 @@ const LoginPage = () => {
       return;
     }
 
-    const found = authService.findAccountByAadhaar(clean);
+    setLoading(true);
+    const found = await authService.lookupAccount(clean);
+    setLoading(false);
+
     if (!found) {
-      setErrorMsg(`Aadhaar '${clean}' is not registered. Add your custom credentials below to sign in.`);
+      setErrorMsg(`Aadhaar '${clean}' is not registered in the database or credential registry. Please check H2 Console or add credentials below.`);
       return;
     }
 
@@ -95,7 +132,7 @@ const LoginPage = () => {
     setCitizenStep('otp');
     toast({
       title: '📲 OTP Sent Successfully',
-      description: `OTP dispatched for Aadhaar ending in ${clean.slice(-4)}. (Designated OTP: ${found.otp})`,
+      description: `OTP dispatched for Aadhaar ending in ${clean.slice(-4)}. (Live DB OTP: ${found.otp})`,
     });
   };
 

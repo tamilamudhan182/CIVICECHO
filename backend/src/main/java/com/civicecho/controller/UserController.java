@@ -40,6 +40,13 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/aadhaar/{aadhaar}")
+    public ResponseEntity<User> getUserByAadhaar(@PathVariable String aadhaar) {
+        return userService.getUserByAadhaar(aadhaar)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping
     public ResponseEntity<User> createUser(@RequestBody User user) {
         User createdUser = userService.createUser(user);

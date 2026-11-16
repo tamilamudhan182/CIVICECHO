@@ -17,8 +17,8 @@ const STORAGE_KEY = 'civic_citizen_credentials';
 const INITIAL_DEFAULT_ACCOUNTS: CitizenAccount[] = [
   {
     id: 'user-001',
-    name: 'Mohan Kumar',
-    email: 'mohankumar@civicecho.org',
+    name: 'TAMILAMUDHAN',
+    email: 'tamilamudhan@civicecho.org',
     aadhaar: '123456789012',
     otp: '123456',
     locality: 'Koramangala',
@@ -79,6 +79,26 @@ export const authService = {
     }
 
     this.saveAccounts(accounts);
+
+    // Sync to backend database
+    apiService.createUser({
+      name: newAccount.name,
+      email: newAccount.email,
+      aadhaar: newAccount.aadhaar,
+      otp: newAccount.otp,
+      aadhaarLast4: newAccount.aadhaar.slice(-4),
+      locality: newAccount.locality,
+      district: newAccount.district,
+      state: newAccount.state,
+      points: newAccount.points ?? 0,
+      avatarInitials: newAccount.name
+        .split(' ')
+        .map(p => p[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2),
+    }).catch(e => console.warn('Failed to sync added user to DB:', e));
+
     return newAccount;
   },
 
@@ -92,22 +112,79 @@ export const authService = {
     return this.getAccounts().find(a => a.aadhaar.replace(/\D/g, '') === clean);
   },
 
+  async lookupAccount(aadhaar: string): Promise<CitizenAccount | undefined> {
+    const clean = aadhaar.replace(/\D/g, '');
+    try {
+      const dbUser = await apiService.getUserByAadhaar(clean);
+      if (dbUser) {
+        const mapped: CitizenAccount = {
+          id: String(dbUser.id || `usr-${Date.now()}`),
+          name: dbUser.name || 'Citizen User',
+          email: dbUser.email || 'citizen@civicecho.org',
+          aadhaar: dbUser.aadhaar || clean,
+          otp: dbUser.otp || '123456',
+          locality: dbUser.locality || 'Koramangala',
+          district: dbUser.district || 'Bengaluru Urban',
+          state: dbUser.state || 'Karnataka',
+          points: dbUser.points ?? 0,
+        };
+        // update local list cache
+        const accounts = this.getAccounts();
+        const idx = accounts.findIndex(a => a.aadhaar.replace(/\D/g, '') === clean);
+        if (idx >= 0) {
+          accounts[idx] = { ...accounts[idx], ...mapped };
+        } else {
+          accounts.push(mapped);
+        }
+        this.saveAccounts(accounts);
+        return mapped;
+      }
+    } catch (e) {
+      console.warn('Backend lookup failed, falling back to local storage:', e);
+    }
+    return this.findAccountByAadhaar(clean);
+  },
+
   async verifyAndLogin(aadhaar: string, otp: string): Promise<{ success: boolean; account?: CitizenAccount; error?: string }> {
     const cleanAadhaar = aadhaar.replace(/\D/g, '');
     const cleanOtp = otp.replace(/\D/g, '');
 
-    const matchedAccount = this.findAccountByAadhaar(cleanAadhaar);
+    // Check directly against backend database first for live presentation
+    let matchedAccount: CitizenAccount | undefined;
+    try {
+      const dbUser = await apiService.getUserByAadhaar(cleanAadhaar);
+      if (dbUser) {
+        matchedAccount = {
+          id: String(dbUser.id || 'usr-db'),
+          name: dbUser.name,
+          email: dbUser.email,
+          aadhaar: dbUser.aadhaar || cleanAadhaar,
+          otp: dbUser.otp || '',
+          locality: dbUser.locality || 'Koramangala',
+          district: dbUser.district || 'Bengaluru Urban',
+          state: dbUser.state || 'Karnataka',
+          points: dbUser.points ?? 0,
+        };
+      }
+    } catch (err) {
+      console.warn('Backend user lookup failed, falling back to local credentials:', err);
+    }
+
+    if (!matchedAccount) {
+      matchedAccount = this.findAccountByAadhaar(cleanAadhaar);
+    }
+
     if (!matchedAccount) {
       return {
         success: false,
-        error: `Aadhaar number '${cleanAadhaar}' is not registered. Please check or add your custom Aadhaar in the manager below.`,
+        error: `Aadhaar number '${cleanAadhaar}' is not registered in the database. Please check H2 Console or add credentials below.`,
       };
     }
 
-    if (matchedAccount.otp !== cleanOtp) {
+    if (matchedAccount.otp && matchedAccount.otp !== cleanOtp) {
       return {
         success: false,
-        error: `Incorrect OTP! Aadhaar ending in ${cleanAadhaar.slice(-4)} requires its own registered OTP.`,
+        error: `Incorrect OTP! Live Database requires OTP '${matchedAccount.otp}' for Aadhaar ending in ${cleanAadhaar.slice(-4)}.`,
       };
     }
 
@@ -128,6 +205,8 @@ export const authService = {
       await apiService.createUser({
         name: matchedAccount.name,
         email: matchedAccount.email,
+        aadhaar: matchedAccount.aadhaar,
+        otp: matchedAccount.otp,
         aadhaarLast4: matchedAccount.aadhaar.slice(-4),
         locality: matchedAccount.locality,
         district: matchedAccount.district,

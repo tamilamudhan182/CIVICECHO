@@ -22,6 +22,8 @@ export interface UserDTO {
   id?: number;
   name: string;
   email: string;
+  aadhaar?: string;
+  otp?: string;
   aadhaarLast4: string;
   locality: string;
   district: string;
@@ -231,6 +233,16 @@ export const apiService = {
       return await res.json();
     } catch (err) {
       return fallbackUsers.find(u => u.email === email) || null;
+    }
+  },
+
+  async getUserByAadhaar(aadhaar: string): Promise<UserDTO | null> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/aadhaar/${encodeURIComponent(aadhaar.trim())}`);
+      if (!res.ok) return fallbackUsers.find(u => u.aadhaar === aadhaar.trim()) || null;
+      return await res.json();
+    } catch (err) {
+      return fallbackUsers.find(u => u.aadhaar === aadhaar.trim()) || null;
     }
   },
 

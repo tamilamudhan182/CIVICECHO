@@ -20,7 +20,22 @@ public class CivicEchoApplication {
     @Bean
     public CommandLineRunner seedDatabase(UserRepository userRepository, IssueRepository issueRepository, IssueService issueService) {
         return args -> {
-            // Seed Sample Civic Issues across ALL Authority Departments (Cleaned of dummy citizens)
+            // Seed Default Verified Citizen into Database for presentation & demonstration
+            if (userRepository.count() == 0) {
+                User defaultCitizen = new User(
+                        "TAMILAMUDHAN", 
+                        "tamilamudhan@civicecho.org", 
+                        "123456789012", 
+                        "123456", 
+                        "Koramangala", 
+                        "Bengaluru Urban", 
+                        "Karnataka"
+                );
+                defaultCitizen.setPoints(0);
+                userRepository.save(defaultCitizen);
+            }
+
+            // Seed Sample Civic Issues across ALL Authority Departments
             if (issueRepository.count() == 0) {
                 // 1. Health Authority Issue
                 CivicIssue issueHealth = new CivicIssue(

@@ -43,16 +43,42 @@ public class UserService {
         return userRepository.findByEmail(email);
     }
 
+    public Optional<User> getUserByAadhaar(String aadhaar) {
+        if (aadhaar == null || aadhaar.trim().isEmpty()) return Optional.empty();
+        return userRepository.findByAadhaar(aadhaar.trim());
+    }
+
     public User createUser(User user) {
-        // Upsert by Email: prevent multiple rows for the same citizen
+        // 1. Upsert by Aadhaar if provided
+        if (user.getAadhaar() != null && !user.getAadhaar().trim().isEmpty()) {
+            Optional<User> existing = userRepository.findByAadhaar(user.getAadhaar().trim());
+            if (existing.isPresent()) {
+                User u = existing.get();
+                if (user.getName() != null) u.setName(user.getName());
+                if (user.getEmail() != null) u.setEmail(user.getEmail());
+                if (user.getOtp() != null) u.setOtp(user.getOtp());
+                if (user.getLocality() != null) u.setLocality(user.getLocality());
+                if (user.getDistrict() != null) u.setDistrict(user.getDistrict());
+                if (user.getState() != null) u.setState(user.getState());
+                u.setAadhaar(user.getAadhaar().trim());
+                if (user.getPoints() != null) {
+                    u.setPoints(Math.max(u.getPoints() != null ? u.getPoints() : 0, user.getPoints()));
+                }
+                return userRepository.save(u);
+            }
+        }
+
+        // 2. Upsert by Email
         if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
             Optional<User> existing = userRepository.findByEmail(user.getEmail().trim());
             if (existing.isPresent()) {
                 User u = existing.get();
-                u.setName(user.getName());
-                u.setLocality(user.getLocality());
-                u.setDistrict(user.getDistrict());
-                u.setState(user.getState());
+                if (user.getName() != null) u.setName(user.getName());
+                if (user.getAadhaar() != null) u.setAadhaar(user.getAadhaar());
+                if (user.getOtp() != null) u.setOtp(user.getOtp());
+                if (user.getLocality() != null) u.setLocality(user.getLocality());
+                if (user.getDistrict() != null) u.setDistrict(user.getDistrict());
+                if (user.getState() != null) u.setState(user.getState());
                 u.setAadhaarLast4(user.getAadhaarLast4());
                 if (user.getPoints() != null) {
                     u.setPoints(Math.max(u.getPoints() != null ? u.getPoints() : 0, user.getPoints()));
@@ -61,11 +87,13 @@ public class UserService {
             }
         }
 
-        // Secondary Upsert check by Name
+        // 3. Secondary Upsert check by Name
         if (user.getName() != null && !user.getName().trim().isEmpty()) {
             List<User> all = userRepository.findAll();
             for (User u : all) {
                 if (u.getName() != null && u.getName().trim().equalsIgnoreCase(user.getName().trim())) {
+                    if (user.getAadhaar() != null) u.setAadhaar(user.getAadhaar());
+                    if (user.getOtp() != null) u.setOtp(user.getOtp());
                     u.setLocality(user.getLocality());
                     u.setDistrict(user.getDistrict());
                     u.setState(user.getState());

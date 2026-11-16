@@ -12,6 +12,8 @@ public class User {
 
     private String name;
     private String email;
+    private String aadhaar;
+    private String otp;
     private String aadhaarLast4;
     private String locality;
     private String district;
@@ -25,6 +27,19 @@ public class User {
         this.points = 0;
         this.issuesReported = 0;
         this.issuesResolved = 0;
+    }
+
+    public User(String name, String email, String aadhaar, String otp, String locality, String district, String state) {
+        this();
+        this.name = name;
+        this.email = email;
+        this.aadhaar = aadhaar;
+        this.otp = otp;
+        this.aadhaarLast4 = (aadhaar != null && aadhaar.length() >= 4) ? aadhaar.substring(aadhaar.length() - 4) : aadhaar;
+        this.locality = locality;
+        this.district = district;
+        this.state = state;
+        this.avatarInitials = computeInitials(name);
     }
 
     public User(String name, String email, String aadhaarLast4, String locality, String district, String state) {
@@ -57,6 +72,17 @@ public class User {
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+
+    public String getAadhaar() { return aadhaar; }
+    public void setAadhaar(String aadhaar) { 
+        this.aadhaar = aadhaar; 
+        if (aadhaar != null && aadhaar.length() >= 4) {
+            this.aadhaarLast4 = aadhaar.substring(aadhaar.length() - 4);
+        }
+    }
+
+    public String getOtp() { return otp; }
+    public void setOtp(String otp) { this.otp = otp; }
 
     public String getAadhaarLast4() { return aadhaarLast4; }
     public void setAadhaarLast4(String aadhaarLast4) { this.aadhaarLast4 = aadhaarLast4; }

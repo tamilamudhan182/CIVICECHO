@@ -158,23 +158,34 @@ const AuthorityDashboard = () => {
               <div className="space-y-4">
                 {filteredIssues.map((issue) => (
                   <div key={issue.id} className="p-4 rounded-lg border border-border bg-card flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-card-foreground">#{issue.id} - {issue.title}</span>
-                        <Badge className="bg-primary/10 text-primary text-xs capitalize">{issue.category}</Badge>
-                        {issue.assignedAuthority && (
-                          <Badge variant="outline" className="text-xs bg-muted/40 font-medium">
-                            🏢 {issue.assignedAuthority}
-                          </Badge>
-                        )}
-                        <Badge className="bg-destructive/10 text-destructive text-xs capitalize">{issue.urgency} Urgency</Badge>
-                        <Badge variant="outline" className="text-xs">Priority Score: {issue.priorityScore?.toFixed(1)}</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{issue.description}</p>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
-                        <span>📍 {issue.locality}</span>
-                        <span>👤 Reported by: {issue.reportedBy}</span>
-                        <span>👥 Upvote Clusters: {issue.clusterCount}</span>
+                    <div className="flex items-start gap-4">
+                      {issue.imageUrl && (
+                        <a href={issue.imageUrl} target="_blank" rel="noopener noreferrer" title="Click to view full image">
+                          <img
+                            src={issue.imageUrl}
+                            alt="Incident Evidence"
+                            className="w-16 h-16 object-cover rounded-lg border border-border shrink-0 shadow-sm hover:opacity-80 transition"
+                          />
+                        </a>
+                      )}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-card-foreground">#{issue.id} - {issue.title}</span>
+                          <Badge className="bg-primary/10 text-primary text-xs capitalize">{issue.category}</Badge>
+                          {issue.assignedAuthority && (
+                            <Badge variant="outline" className="text-xs bg-muted/40 font-medium">
+                              🏢 {issue.assignedAuthority}
+                            </Badge>
+                          )}
+                          <Badge className="bg-destructive/10 text-destructive text-xs capitalize">{issue.urgency} Urgency</Badge>
+                          <Badge variant="outline" className="text-xs">Priority Score: {issue.priorityScore?.toFixed(1)}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{issue.description}</p>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1 flex-wrap">
+                          <span>📍 {issue.locality}</span>
+                          <span>👤 Reported by: {issue.reportedBy}</span>
+                          <span>👥 Upvote Clusters: {issue.clusterCount}</span>
+                        </div>
                       </div>
                     </div>
 

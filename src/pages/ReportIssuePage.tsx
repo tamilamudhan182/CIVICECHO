@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Upload, Sparkles, Send, ShieldCheck } from 'lucide-react';
+import { MapPin, Upload, Sparkles, Send, ShieldCheck, Image as ImageIcon, X, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +32,58 @@ const ReportIssuePage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState<{ urgency: string; sentiment: number; tags: string[]; suggestedAuthority: string } | null>(null);
 
+  // Evidence Image Upload State
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFileName, setImageFileName] = useState<string>('');
+  const [imageFileSize, setImageFileSize] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const selectedCategoryObj = categories.find((c) => c.value === category);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Invalid File',
+        description: 'Please upload an image file (PNG, JPG, JPEG, WEBP).',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: 'File Too Large',
+        description: 'Image size should be less than 10MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setImageFileName(file.name);
+    setImageFileSize(`${(file.size / 1024).toFixed(1)} KB`);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+      toast({
+        title: '📷 Evidence Photo Attached',
+        description: `${file.name} ready to submit.`,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setImagePreview(null);
+    setImageFileName('');
+    setImageFileSize('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleAnalyze = () => {
     if (!title && !description) return;
@@ -93,6 +144,7 @@ const ReportIssuePage = () => {
         locality: localStorage.getItem('userLocality') || 'Koramangala',
         reportedBy: localStorage.getItem('userEmail') || 'citizen@civicecho.org',
         sentimentScore: aiResult?.sentiment || -0.65,
+        imageUrl: imagePreview || '',
       });
 
       // Update local storage points (+50 pts for filing)
@@ -101,13 +153,14 @@ const ReportIssuePage = () => {
 
       toast({
         title: `✅ Complaint #${created.id} Routed to ${matched.departmentName}`,
-        description: `Saved to database! +50 Civic Points awarded for reporting. Priority Score: ${created.priorityScore?.toFixed(1)}.`,
+        description: `Saved to database! +50 Civic Points awarded. Priority Score: ${created.priorityScore?.toFixed(1)}.`,
       });
 
       setTitle('');
       setDescription('');
       setCategory('sanitation');
       setAiResult(null);
+      handleRemoveImage();
       navigate('/dashboard');
     } catch (err) {
       toast({
@@ -181,12 +234,91 @@ const ReportIssuePage = () => {
             )}
 
             <div className="space-y-2">
-              <Label className="text-foreground">Evidence (optional)</Label>
-              <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/40 transition cursor-pointer">
-                <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">Click to upload images or PDFs</p>
-                <p className="text-xs text-muted-foreground mt-1">Max 10MB per file</p>
+              <div className="flex items-center justify-between">
+                <Label className="text-foreground">Incident Photo Evidence</Label>
+                {imagePreview && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    className="text-xs text-destructive hover:underline flex items-center gap-1 font-medium"
+                  >
+                    <X className="w-3.5 h-3.5" /> Remove Image
+                  </button>
+                )}
               </div>
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleImageChange}
+                className="hidden"
+              />
+
+              {!imagePreview ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/60 hover:bg-primary/5 transition cursor-pointer group"
+                >
+                  <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition">
+                    <Upload className="w-6 h-6" />
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">Click to browse or drop photo here</p>
+                  <p className="text-xs text-muted-foreground mt-1">Supports PNG, JPG, JPEG, WEBP (Max 10MB)</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 mr-1.5" /> Choose Image File
+                  </Button>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border p-3 bg-card/60 flex items-center gap-4">
+                  <div className="relative group">
+                    <img
+                      src={imagePreview}
+                      alt="Evidence Preview"
+                      className="w-20 h-20 object-cover rounded-md border border-border shadow-sm"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition rounded-md flex items-center justify-center">
+                      <Check className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-foreground truncate max-w-[220px]">{imageFileName}</span>
+                      <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 font-medium">Ready</Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">Size: {imageFileSize} • Evidence verified</p>
+                    <div className="pt-1 flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs px-2.5"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Change Photo
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs px-2 text-destructive hover:bg-destructive/10"
+                        onClick={handleRemoveImage}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

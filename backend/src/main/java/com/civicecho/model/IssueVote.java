@@ -74,3 +74,4 @@ public class IssueVote {
         this.votedAt = votedAt;
     }
 }
+

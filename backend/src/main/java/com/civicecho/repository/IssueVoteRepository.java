@@ -13,3 +13,4 @@ public interface IssueVoteRepository extends JpaRepository<IssueVote, Long> {
     List<IssueVote> findByIssueId(Long issueId);
     long countByIssueId(Long issueId);
 }
+

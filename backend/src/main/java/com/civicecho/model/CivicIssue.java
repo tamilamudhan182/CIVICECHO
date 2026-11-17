@@ -29,6 +29,9 @@ public class CivicIssue {
     private LocalDateTime resolvedAt;
     private Integer clusterCount;
     private Double priorityScore;
+
+    @Lob
+    @Column(columnDefinition = "CLOB")
     private String imageUrl;
 
     public CivicIssue() {

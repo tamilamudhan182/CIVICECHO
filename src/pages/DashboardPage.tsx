@@ -19,6 +19,7 @@ const DashboardPage = () => {
     setLoading(true);
     try {
       const userEmail = localStorage.getItem('userEmail') || 'citizen@civicecho.org';
+      const userAadhaar = localStorage.getItem('userAadhaar') || '';
       const [fetchedIssues, fetchedUsers, votedIds] = await Promise.all([
         apiService.getIssues(),
         apiService.getUsers(),
@@ -26,22 +27,50 @@ const DashboardPage = () => {
       ]);
       setIssues(fetchedIssues);
       setVotedIssueIds(new Set(votedIds));
-      const matched = fetchedUsers.find(u => u.email === userEmail);
+
+      // Match citizen by Aadhaar or email
+      const matched = fetchedUsers.find(u => 
+        (userAadhaar && u.aadhaar && u.aadhaar.replace(/\D/g, '') === userAadhaar.replace(/\D/g, '')) ||
+        (userEmail && u.email && u.email.trim().toLowerCase() === userEmail.trim().toLowerCase())
+      );
+
       if (matched) {
         setCurrentUser(matched);
+        if (matched.points !== undefined && matched.points !== null) {
+          localStorage.setItem('userPoints', String(matched.points));
+        }
       } else {
-        setCurrentUser({
-          name: localStorage.getItem('userName') || 'Citizen',
-          email: userEmail || 'citizen@civicecho.org',
-          aadhaarLast4: localStorage.getItem('userAadhaarLast4') || '0000',
-          locality: localStorage.getItem('userLocality') || 'Koramangala',
-          district: localStorage.getItem('userDistrict') || 'Bengaluru Urban',
-          state: 'Karnataka',
-          points: Number(localStorage.getItem('userPoints') || '0'),
-          avatarInitials: (localStorage.getItem('userName') || 'CU').slice(0, 2).toUpperCase(),
-          issuesReported: 0,
-          issuesResolved: 0,
-        });
+        // Fallback for brand-new profile: query directly by Aadhaar
+        let dbUser = null;
+        if (userAadhaar) {
+          try {
+            dbUser = await apiService.getUserByAadhaar(userAadhaar);
+          } catch (e) {
+            console.warn('Could not fetch user by Aadhaar:', e);
+          }
+        }
+
+        if (dbUser) {
+          setCurrentUser(dbUser);
+          if (dbUser.points !== undefined && dbUser.points !== null) {
+            localStorage.setItem('userPoints', String(dbUser.points));
+          }
+        } else {
+          const storedPts = Number(localStorage.getItem('userPoints') || '0');
+          setCurrentUser({
+            name: localStorage.getItem('userName') || 'Citizen',
+            email: userEmail || 'citizen@civicecho.org',
+            aadhaar: userAadhaar,
+            aadhaarLast4: localStorage.getItem('userAadhaarLast4') || '0000',
+            locality: localStorage.getItem('userLocality') || 'Koramangala',
+            district: localStorage.getItem('userDistrict') || 'Bengaluru Urban',
+            state: 'Karnataka',
+            points: storedPts,
+            avatarInitials: (localStorage.getItem('userName') || 'CU').slice(0, 2).toUpperCase(),
+            issuesReported: 0,
+            issuesResolved: 0,
+          });
+        }
       }
     } catch (err) {
       console.error('Error loading dashboard data:', err);
@@ -98,9 +127,11 @@ const DashboardPage = () => {
   const userReportedCount = myReportedIssues.length;
   const userResolvedCount = myResolvedIssues.length;
 
-  // Civic points strictly reflect real participation: 0 if no cases reported
+  // Civic points strictly reflect live points from DB profile or participation
   const calculatedPoints = (userReportedCount * 50) + (userResolvedCount * 100);
-  const livePoints = userReportedCount > 0 ? (currentUser?.points && currentUser.points > 0 ? currentUser.points : calculatedPoints) : 0;
+  const livePoints = (currentUser?.points !== undefined && currentUser?.points !== null)
+    ? currentUser.points
+    : (Number(localStorage.getItem('userPoints')) || calculatedPoints || 0);
 
   const stats = [
     { label: 'Issues Reported', value: userReportedCount, icon: FileText, color: 'text-primary' },
@@ -159,22 +190,31 @@ const DashboardPage = () => {
             <div className="space-y-3">
               {issues.map((issue) => (
                 <Card key={issue.id} className="shadow-card border-border hover:border-primary/50 transition">
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-card-foreground">{issue.title}</span>
-                        <Badge variant={issue.status === 'RESOLVED' ? 'outline' : 'secondary'} className="capitalize text-xs">
-                          {issue.status}
-                        </Badge>
-                        <Badge className="bg-primary/10 text-primary text-xs capitalize">
-                          {issue.urgency} Urgency
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{issue.description}</p>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
-                        <span>📍 {issue.locality}</span>
-                        <span>⚡ Priority Score: <strong className="text-primary">{issue.priorityScore?.toFixed(1)}</strong></span>
-                        <span>👥 Clusters: {issue.clusterCount}</span>
+                  <CardContent className="p-4 flex items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      {issue.imageUrl && (
+                        <img
+                          src={issue.imageUrl}
+                          alt={issue.title}
+                          className="w-16 h-16 object-cover rounded-lg border border-border shrink-0 shadow-sm mt-0.5"
+                        />
+                      )}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-card-foreground">{issue.title}</span>
+                          <Badge variant={issue.status === 'RESOLVED' ? 'outline' : 'secondary'} className="capitalize text-xs">
+                            {issue.status}
+                          </Badge>
+                          <Badge className="bg-primary/10 text-primary text-xs capitalize">
+                            {issue.urgency} Urgency
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{issue.description}</p>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1 flex-wrap">
+                          <span>📍 {issue.locality}</span>
+                          <span>⚡ Priority Score: <strong className="text-primary">{issue.priorityScore?.toFixed(1)}</strong></span>
+                          <span>👥 Clusters: {issue.clusterCount}</span>
+                        </div>
                       </div>
                     </div>
                     {issue.id && (

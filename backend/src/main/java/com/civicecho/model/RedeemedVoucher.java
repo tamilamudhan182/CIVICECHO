@@ -175,3 +175,4 @@ public class RedeemedVoucher {
         this.createdAt = createdAt;
     }
 }
+

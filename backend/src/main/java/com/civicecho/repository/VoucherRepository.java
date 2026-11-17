@@ -11,3 +11,4 @@ public interface VoucherRepository extends JpaRepository<RedeemedVoucher, Long> 
     List<RedeemedVoucher> findByUserEmailIgnoreCaseOrderByCreatedAtDesc(String userEmail);
     List<RedeemedVoucher> findAllByOrderByCreatedAtDesc();
 }
+

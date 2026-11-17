@@ -5,6 +5,8 @@ export interface CivicIssueDTO {
   title: string;
   description: string;
   category: string;
+  department?: string;
+  assignedAuthority?: string;
   status?: string;
   urgency?: string;
   sentimentScore?: number;
@@ -16,6 +18,25 @@ export interface CivicIssueDTO {
   clusterCount?: number;
   priorityScore?: number;
   imageUrl?: string;
+}
+
+export interface RedeemedVoucherDTO {
+  id?: number;
+  voucherCode: string;
+  partnerId: string;
+  name: string;
+  partnerBrand: string;
+  category: string;
+  icon: string;
+  discountValue: string;
+  pointsSpent: number;
+  redeemedDate: string;
+  expiryDate: string;
+  validityDays: number;
+  rules?: string;
+  howItWorks?: string;
+  userEmail: string;
+  userAadhaar?: string;
 }
 
 export interface UserDTO {
@@ -195,20 +216,75 @@ export const apiService = {
     }
   },
 
-  async upvoteIssue(id: number): Promise<CivicIssueDTO> {
+  async upvoteIssue(id: number, voterEmail?: string, voterAadhaar?: string): Promise<CivicIssueDTO> {
     try {
+      const email = voterEmail || localStorage.getItem('userEmail') || 'citizen@civicecho.org';
+      const aadhaar = voterAadhaar || localStorage.getItem('userAadhaar') || '';
       const res = await fetch(`${API_BASE_URL}/issues/${id}/upvote`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, voterEmail: email, aadhaar }),
       });
-      if (!res.ok) throw new Error('Failed to upvote issue on Spring Boot API');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to upvote issue on Spring Boot API');
+      }
       return await res.json();
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message && err.message.includes('already voted')) {
+        throw err;
+      }
       const target = fallbackIssues.find(i => i.id === id);
       if (target) {
         target.clusterCount = (target.clusterCount || 1) + 1;
         target.priorityScore = (target.priorityScore || 20) + 5;
         return target;
       }
+      throw err;
+    }
+  },
+
+  async getVotedIssueIds(email: string): Promise<number[]> {
+    try {
+      const cleanEmail = email || localStorage.getItem('userEmail') || '';
+      if (!cleanEmail) return [];
+      const res = await fetch(`${API_BASE_URL}/issues/voted?email=${encodeURIComponent(cleanEmail)}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('Could not fetch voted issues from DB:', err);
+    }
+    return [];
+  },
+
+  async getRedeemedVouchers(email?: string): Promise<RedeemedVoucherDTO[]> {
+    try {
+      const cleanEmail = email || localStorage.getItem('userEmail') || '';
+      const res = await fetch(`${API_BASE_URL}/vouchers?email=${encodeURIComponent(cleanEmail)}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('Could not fetch vouchers from DB:', err);
+    }
+    return [];
+  },
+
+  async redeemVoucher(voucher: Partial<RedeemedVoucherDTO>): Promise<RedeemedVoucherDTO> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/vouchers/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(voucher),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to redeem voucher on Spring Boot');
+    } catch (err) {
+      console.warn('Error redeeming voucher on backend:', err);
       throw err;
     }
   },

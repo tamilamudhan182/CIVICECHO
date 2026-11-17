@@ -17,6 +17,8 @@ public class CivicIssue {
     private String description;
 
     private String category;
+    private String department;
+    private String assignedAuthority;
     private String status; // PENDING, IN_PROGRESS, RESOLVED
     private String urgency; // LOW, MEDIUM, HIGH, CRITICAL
     private Double sentimentScore;
@@ -61,6 +63,12 @@ public class CivicIssue {
 
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }
+
+    public String getDepartment() { return department; }
+    public void setDepartment(String department) { this.department = department; }
+
+    public String getAssignedAuthority() { return assignedAuthority; }
+    public void setAssignedAuthority(String assignedAuthority) { this.assignedAuthority = assignedAuthority; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

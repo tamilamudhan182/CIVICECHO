@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Upload, Sparkles, Send } from 'lucide-react';
+import { MapPin, Upload, Sparkles, Send, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,13 +13,13 @@ import { useToast } from '@/hooks/use-toast';
 import { apiService } from '@/services/api';
 import { useNavigate } from 'react-router-dom';
 
-const categories = [
-  { value: 'infrastructure', label: 'Infrastructure' },
-  { value: 'health', label: 'Health' },
-  { value: 'safety', label: 'Safety' },
-  { value: 'sanitation', label: 'Sanitation' },
-  { value: 'water', label: 'Water Supply' },
-  { value: 'electricity', label: 'Electricity' },
+export const categories = [
+  { value: 'health', label: '🏥 Health Authority (Public Health Board)', departmentName: 'Public Health Board', admin: 'HEALTH-ADM-01' },
+  { value: 'safety', label: '🛡️ Safety Authority (Traffic & Safety Control)', departmentName: 'Safety & Traffic Control', admin: 'SAFETY-ADM-01' },
+  { value: 'sanitation', label: '🧹 Sanitation Authority (Waste & Sanitation Board)', departmentName: 'Sanitation & Waste Board', admin: 'SANITATION-ADM-01' },
+  { value: 'water', label: '🚰 Water Supply Authority (Water & Drainage Board)', departmentName: 'Water Supply & Drainage Board', admin: 'WATER-ADM-01' },
+  { value: 'electricity', label: '⚡ Electricity Authority (Electricity & Power Board)', departmentName: 'Electricity & Power Board', admin: 'ELEC-ADM-01' },
+  { value: 'infrastructure', label: '🛠️ Infrastructure Authority (Roads & Infra Dept)', departmentName: 'Roads & Infrastructure Department', admin: 'INFRA-ADM-01' },
 ];
 
 const ReportIssuePage = () => {
@@ -27,34 +27,67 @@ const ReportIssuePage = () => {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState('sanitation');
   const [analyzing, setAnalyzing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [aiResult, setAiResult] = useState<{ urgency: string; sentiment: number; tags: string[] } | null>(null);
+  const [aiResult, setAiResult] = useState<{ urgency: string; sentiment: number; tags: string[]; suggestedAuthority: string } | null>(null);
+
+  const selectedCategoryObj = categories.find((c) => c.value === category);
 
   const handleAnalyze = () => {
-    if (!title || !description) return;
+    if (!title && !description) return;
     setAnalyzing(true);
     setTimeout(() => {
-      const urgency = description.toLowerCase().includes('danger') || description.toLowerCase().includes('accident') ? 'CRITICAL' : 'HIGH';
+      const text = `${title} ${description}`.toLowerCase();
+      const urgency = text.includes('danger') || text.includes('accident') || text.includes('critical') || text.includes('burst')
+        ? 'CRITICAL'
+        : 'HIGH';
+
+      let autoCategory = category;
+      if (text.includes('garbage') || text.includes('waste') || text.includes('trash') || text.includes('stench') || text.includes('dump') || text.includes('overflow')) {
+        autoCategory = 'sanitation';
+      } else if (text.includes('mosquito') || text.includes('dengue') || text.includes('clinic') || text.includes('hospital') || text.includes('health') || text.includes('disease') || text.includes('stagnant')) {
+        autoCategory = 'health';
+      } else if (text.includes('water') || text.includes('pipe') || text.includes('drainage') || text.includes('sewage') || text.includes('leak')) {
+        autoCategory = 'water';
+      } else if (text.includes('light') || text.includes('wire') || text.includes('electricity') || text.includes('transformer') || text.includes('power')) {
+        autoCategory = 'electricity';
+      } else if (text.includes('traffic') || text.includes('guardrail') || text.includes('signal') || text.includes('crossing') || text.includes('safety')) {
+        autoCategory = 'safety';
+      } else if (text.includes('pothole') || text.includes('road') || text.includes('footpath') || text.includes('bridge')) {
+        autoCategory = 'infrastructure';
+      }
+
+      setCategory(autoCategory);
+      const matched = categories.find((c) => c.value === autoCategory);
+
       setAiResult({
         urgency,
-        sentiment: -0.78,
-        tags: ['public-safety', category || 'general', 'requires-inspection'],
+        sentiment: -0.75,
+        tags: ['civic-priority', autoCategory, 'auto-routed'],
+        suggestedAuthority: matched ? matched.departmentName : 'Competent Authority',
       });
       setAnalyzing(false);
-    }, 1000);
+
+      toast({
+        title: '🤖 AI Auto-Routing Complete',
+        description: `Routed to: ${matched?.departmentName || 'Competent Authority'} (Urgency: ${urgency})`,
+      });
+    }, 800);
   };
 
   const handleSubmit = async () => {
     if (!title || !description || !category) return;
     setSubmitting(true);
     try {
+      const matched = categories.find((c) => c.value === category) || categories[0];
       const urgency = aiResult?.urgency || 'MEDIUM';
       const created = await apiService.createIssue({
         title,
         description,
-        category,
+        category: matched.value,
+        department: matched.value,
+        assignedAuthority: matched.departmentName,
         urgency,
         location: `${localStorage.getItem('userLocality') || 'Koramangala'}, Bengaluru`,
         locality: localStorage.getItem('userLocality') || 'Koramangala',
@@ -62,19 +95,23 @@ const ReportIssuePage = () => {
         sentimentScore: aiResult?.sentiment || -0.65,
       });
 
+      // Update local storage points (+50 pts for filing)
+      const currentPts = Number(localStorage.getItem('userPoints') || '0');
+      localStorage.setItem('userPoints', String(currentPts + 50));
+
       toast({
-        title: '✅ Issue Reported & Saved to Spring Boot',
-        description: `Complaint #${created.id} submitted! Calculated Priority Score: ${created.priorityScore?.toFixed(1)}.`,
+        title: `✅ Complaint #${created.id} Routed to ${matched.departmentName}`,
+        description: `Saved to database! +50 Civic Points awarded for reporting. Priority Score: ${created.priorityScore?.toFixed(1)}.`,
       });
 
       setTitle('');
       setDescription('');
-      setCategory('');
+      setCategory('sanitation');
       setAiResult(null);
       navigate('/dashboard');
     } catch (err) {
       toast({
-        title: 'Error',
+        title: 'Error Submitting Complaint',
         description: 'Failed to submit issue to Spring Boot backend server.',
         variant: 'destructive',
       });
@@ -108,7 +145,7 @@ const ReportIssuePage = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-foreground">Category</Label>
+                <Label className="text-foreground">Category & Target Authority</Label>
                 <Select value={category} onValueChange={setCategory}>
                   <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
@@ -128,6 +165,20 @@ const ReportIssuePage = () => {
                 <p className="text-xs text-muted-foreground">Auto-detected from your geo-fence</p>
               </div>
             </div>
+
+            {selectedCategoryObj && (
+              <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-primary" />
+                  <div>
+                    <span className="font-semibold text-foreground">Assigned Department: </span>
+                    <span className="text-primary font-bold">{selectedCategoryObj.departmentName}</span>
+                    <span className="text-muted-foreground ml-1">({selectedCategoryObj.admin})</span>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[11px] capitalize bg-background">Department: {selectedCategoryObj.value}</Badge>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label className="text-foreground">Evidence (optional)</Label>

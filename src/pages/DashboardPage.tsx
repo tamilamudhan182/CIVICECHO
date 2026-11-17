@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, CheckCircle2, Award, TrendingUp, Inbox, ArrowUp } from 'lucide-react';
+import { FileText, CheckCircle2, Award, TrendingUp, Inbox, ArrowUp, Check } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,17 +12,20 @@ const DashboardPage = () => {
   const { toast } = useToast();
   const [issues, setIssues] = useState<CivicIssueDTO[]>([]);
   const [currentUser, setCurrentUser] = useState<UserDTO | null>(null);
+  const [votedIssueIds, setVotedIssueIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [fetchedIssues, fetchedUsers] = await Promise.all([
+      const userEmail = localStorage.getItem('userEmail') || 'citizen@civicecho.org';
+      const [fetchedIssues, fetchedUsers, votedIds] = await Promise.all([
         apiService.getIssues(),
         apiService.getUsers(),
+        apiService.getVotedIssueIds(userEmail),
       ]);
       setIssues(fetchedIssues);
-      const userEmail = localStorage.getItem('userEmail');
+      setVotedIssueIds(new Set(votedIds));
       const matched = fetchedUsers.find(u => u.email === userEmail);
       if (matched) {
         setCurrentUser(matched);
@@ -52,17 +55,37 @@ const DashboardPage = () => {
   }, []);
 
   const handleUpvote = async (issueId: number) => {
-    try {
-      const updated = await apiService.upvoteIssue(issueId);
-      setIssues((prev) => prev.map((i) => (i.id === issueId ? updated : i)));
+    if (votedIssueIds.has(issueId)) {
       toast({
-        title: '👍 Issue Upvoted!',
-        description: `Priority score recalculated to ${updated.priorityScore?.toFixed(1)} by Spring Boot Service layer.`,
+        title: 'Already Voted',
+        description: 'You have already voted on this issue. Citizens can only vote once per issue.',
+        variant: 'destructive',
       });
-    } catch (err) {
+      return;
+    }
+
+    const userEmail = localStorage.getItem('userEmail') || 'citizen@civicecho.org';
+    const userAadhaar = localStorage.getItem('userAadhaar') || '';
+
+    try {
+      const updated = await apiService.upvoteIssue(issueId, userEmail, userAadhaar);
+      setIssues((prev) => prev.map((i) => (i.id === issueId ? updated : i)));
+      setVotedIssueIds((prev) => new Set([...prev, issueId]));
+
+      if (currentUser) {
+        const newPts = (currentUser.points || 0) + 10;
+        setCurrentUser({ ...currentUser, points: newPts });
+        localStorage.setItem('userPoints', String(newPts));
+      }
+
       toast({
-        title: 'Error',
-        description: 'Failed to upvote issue.',
+        title: '🗳️ Vote Recorded in Database!',
+        description: `Your vote was saved. +10 Civic Points awarded! Priority updated to ${updated.priorityScore?.toFixed(1)}.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Voting Conflict',
+        description: err.message || 'Citizens may only vote once per issue.',
         variant: 'destructive',
       });
     }
@@ -155,9 +178,15 @@ const DashboardPage = () => {
                       </div>
                     </div>
                     {issue.id && (
-                      <Button size="sm" variant="secondary" onClick={() => handleUpvote(issue.id!)}>
-                        <ArrowUp className="w-4 h-4 mr-1" /> Upvote ({issue.clusterCount})
-                      </Button>
+                      votedIssueIds.has(issue.id) ? (
+                        <Button size="sm" variant="outline" disabled className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 cursor-not-allowed">
+                          <Check className="w-4 h-4 mr-1 text-emerald-600" /> Voted ({issue.clusterCount})
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="secondary" onClick={() => handleUpvote(issue.id!)}>
+                          <ArrowUp className="w-4 h-4 mr-1" /> Upvote ({issue.clusterCount})
+                        </Button>
+                      )
                     )}
                   </CardContent>
                 </Card>

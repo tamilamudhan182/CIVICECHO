@@ -195,14 +195,15 @@ const WalletPage = () => {
   const loadWalletData = async () => {
     setLoading(true);
     try {
-      const [fetchedUsers, fetchedIssues] = await Promise.all([
+      const activeEmail = localStorage.getItem('userEmail');
+      const [fetchedUsers, fetchedIssues, dbVouchers] = await Promise.all([
         apiService.getUsers(),
         apiService.getIssues(),
+        apiService.getRedeemedVouchers(activeEmail || ''),
       ]);
 
       setIssues(fetchedIssues);
 
-      const activeEmail = localStorage.getItem('userEmail');
       const currentUserProfile = (activeEmail ? fetchedUsers.find(u => u.email === activeEmail) : null) || fetchedUsers[0] || {
         id: 1,
         name: localStorage.getItem('userName') || 'Citizen',
@@ -220,17 +221,51 @@ const WalletPage = () => {
       if (currentUserProfile) {
         setUser(currentUserProfile);
 
-        // Load saved redeemed vouchers for this citizen
+        // Load saved redeemed vouchers from Spring Boot DB first, falling back to localStorage
         let savedVouchers: RedeemedVoucher[] = [];
-        try {
-          const savedVouchersRaw = localStorage.getItem(getStorageKey());
-          if (savedVouchersRaw) {
-            savedVouchers = JSON.parse(savedVouchersRaw);
-            setRedeemedVouchers(savedVouchers);
+        if (dbVouchers && dbVouchers.length > 0) {
+          savedVouchers = dbVouchers.map(v => {
+            let parsedRules: string[] = [];
+            let parsedHowItWorks: string[] = [];
+            try {
+              parsedRules = v.rules ? JSON.parse(v.rules) : [];
+            } catch {
+              parsedRules = v.rules ? v.rules.split('; ') : [];
+            }
+            try {
+              parsedHowItWorks = v.howItWorks ? JSON.parse(v.howItWorks) : [];
+            } catch {
+              parsedHowItWorks = v.howItWorks ? v.howItWorks.split('; ') : [];
+            }
+            const partner = redemptionPartners.find(p => p.id === v.partnerId);
+            return {
+              id: String(v.id || v.voucherCode),
+              voucherCode: v.voucherCode,
+              partnerId: v.partnerId,
+              name: v.name,
+              partnerBrand: v.partnerBrand,
+              category: v.category,
+              icon: v.icon,
+              discountValue: v.discountValue,
+              pointsSpent: v.pointsSpent,
+              redeemedDate: v.redeemedDate,
+              expiryDate: v.expiryDate,
+              validityDays: v.validityDays,
+              rules: parsedRules.length > 0 ? parsedRules : (partner?.rules || []),
+              howItWorks: parsedHowItWorks.length > 0 ? parsedHowItWorks : (partner?.howItWorks || []),
+            };
+          });
+        } else {
+          try {
+            const savedVouchersRaw = localStorage.getItem(getStorageKey());
+            if (savedVouchersRaw) {
+              savedVouchers = JSON.parse(savedVouchersRaw);
+            }
+          } catch (e) {
+            console.warn('Error loading redeemed vouchers from localStorage:', e);
           }
-        } catch (e) {
-          console.warn('Error loading redeemed vouchers from localStorage:', e);
         }
+        setRedeemedVouchers(savedVouchers);
 
         // Filter issues reported specifically by this logged-in citizen
         const myReportedIssues = fetchedIssues.filter(i => 
@@ -238,13 +273,16 @@ const WalletPage = () => {
         );
         const myResolvedIssues = myReportedIssues.filter(i => i.status === 'RESOLVED');
 
-        // Points Rule: If a citizen has no reported cases, points are strictly 0!
+        // Points Rule: If citizen has points stored in DB, use them; otherwise compute from real activities
         const earnedFromReporting = myReportedIssues.length * 50;
         const earnedFromResolving = myResolvedIssues.length * 100;
         const totalEarned = earnedFromReporting + earnedFromResolving;
         const totalSpent = savedVouchers.reduce((acc, v) => acc + (v.pointsSpent || 0), 0);
 
-        const currentLivePoints = myReportedIssues.length === 0 ? 0 : Math.max(0, totalEarned - totalSpent);
+        const currentLivePoints = currentUserProfile.points !== undefined && currentUserProfile.points !== null
+          ? currentUserProfile.points
+          : (myReportedIssues.length === 0 ? 0 : Math.max(0, totalEarned - totalSpent));
+
         setPoints(currentLivePoints);
         localStorage.setItem('userPoints', String(currentLivePoints));
 
@@ -354,6 +392,27 @@ const WalletPage = () => {
     const updatedVouchers = [newVoucher, ...redeemedVouchers];
     setRedeemedVouchers(updatedVouchers);
     localStorage.setItem(getStorageKey(), JSON.stringify(updatedVouchers));
+
+    // Save directly to Spring Boot H2 Database
+    apiService.redeemVoucher({
+      voucherCode: code,
+      partnerId: partner.id,
+      name: partner.name,
+      partnerBrand: partner.partnerBrand,
+      category: partner.category,
+      icon: partner.icon,
+      discountValue: partner.discountValue,
+      pointsSpent: partner.pointsCost,
+      redeemedDate: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      expiryDate: formattedExpiry,
+      validityDays: partner.validityDays,
+      rules: JSON.stringify(partner.rules),
+      howItWorks: JSON.stringify(partner.howItWorks),
+      userEmail: localStorage.getItem('userEmail') || 'citizen@civicecho.org',
+      userAadhaar: localStorage.getItem('userAadhaar') || '',
+    }).catch((err) => {
+      console.warn('Could not persist voucher redemption to Spring Boot backend:', err);
+    });
 
     // Add to transaction log
     const newTx: Transaction = {

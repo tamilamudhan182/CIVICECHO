@@ -51,8 +51,37 @@ public class IssueController {
     }
 
     @PostMapping("/{id}/upvote")
-    public ResponseEntity<CivicIssue> upvoteIssue(@PathVariable Long id) {
-        CivicIssue upvotedIssue = issueService.upvoteIssue(id);
-        return ResponseEntity.ok(upvotedIssue);
+    public ResponseEntity<?> upvoteIssue(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body,
+            @RequestParam(required = false) String email
+    ) {
+        String voterEmail = email;
+        String voterAadhaar = null;
+        if (body != null) {
+            if (body.containsKey("email") && (voterEmail == null || voterEmail.isEmpty())) {
+                voterEmail = body.get("email");
+            }
+            if (body.containsKey("voterEmail") && (voterEmail == null || voterEmail.isEmpty())) {
+                voterEmail = body.get("voterEmail");
+            }
+            if (body.containsKey("aadhaar")) {
+                voterAadhaar = body.get("aadhaar");
+            }
+        }
+
+        try {
+            CivicIssue upvotedIssue = issueService.upvoteIssue(id, voterEmail, voterAadhaar);
+            return ResponseEntity.ok(upvotedIssue);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/voted")
+    public ResponseEntity<List<Long>> getVotedIssueIds(@RequestParam String email) {
+        return ResponseEntity.ok(issueService.getVotedIssueIds(email));
     }
 }

@@ -70,7 +70,10 @@ const AuthorityDashboard = () => {
 
   const filteredIssues = selectedDept === 'all'
     ? issues
-    : issues.filter((i) => i.category?.toLowerCase() === selectedDept.toLowerCase());
+    : issues.filter((i) => 
+        (i.category && i.category.trim().toLowerCase() === selectedDept.trim().toLowerCase()) ||
+        (i.department && i.department.trim().toLowerCase() === selectedDept.trim().toLowerCase())
+      );
 
   const pendingCount = filteredIssues.filter((i) => i.status === 'PENDING').length;
   const inProgressCount = filteredIssues.filter((i) => i.status === 'IN_PROGRESS').length;
@@ -159,6 +162,11 @@ const AuthorityDashboard = () => {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-card-foreground">#{issue.id} - {issue.title}</span>
                         <Badge className="bg-primary/10 text-primary text-xs capitalize">{issue.category}</Badge>
+                        {issue.assignedAuthority && (
+                          <Badge variant="outline" className="text-xs bg-muted/40 font-medium">
+                            🏢 {issue.assignedAuthority}
+                          </Badge>
+                        )}
                         <Badge className="bg-destructive/10 text-destructive text-xs capitalize">{issue.urgency} Urgency</Badge>
                         <Badge variant="outline" className="text-xs">Priority Score: {issue.priorityScore?.toFixed(1)}</Badge>
                       </div>
